@@ -28,7 +28,7 @@ st.set_page_config(
 BASE_DIR = Path(__file__).resolve().parent
 
 CSS_PATH = BASE_DIR / "style.css"
-IMAGE_PATH = BASE_DIR / "assets" / "background.png"
+IMAGE_PATH = BASE_DIR / "background.png"
 
 
 # =========================================================
