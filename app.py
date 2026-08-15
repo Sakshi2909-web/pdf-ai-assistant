@@ -5,11 +5,10 @@ from pathlib import Path
 import streamlit as st
 from google import genai
 from pypdf import PdfReader
-from sentence_transformers import SentenceTransformer
 
 
 # =========================================================
-# PAGE CONFIGURATION
+# PAGE CONFIG
 # =========================================================
 
 st.set_page_config(
@@ -21,95 +20,50 @@ st.set_page_config(
 
 
 # =========================================================
-# PROJECT PATH
+# PATHS
 # =========================================================
 
 BASE_DIR = Path(__file__).resolve().parent
 
-CSS_PATH = BASE_DIR / "style.css"
-IMAGE_PATH = BASE_DIR / "background.png"
-
-
-# =========================================================
-# LOAD CSS
-# =========================================================
-
-try:
-    with open(CSS_PATH, "r", encoding="utf-8") as f:
-        css = f.read()
-
-except FileNotFoundError:
-    st.error("❌ style.css file not found.")
-    st.stop()
+CSS_FILE = BASE_DIR / "style.css"
+BACKGROUND_FILE = BASE_DIR / "background.png"
 
 
 # =========================================================
 # LOAD BACKGROUND IMAGE
 # =========================================================
 
-try:
-    with open(IMAGE_PATH, "rb") as img:
-        encoded_image = base64.b64encode(
-            img.read()
-        ).decode("utf-8")
-
-except FileNotFoundError:
-    st.error("❌ background.png file not found.")
+if not BACKGROUND_FILE.exists():
+    st.error("❌ background.png not found.")
     st.stop()
 
+with open(BACKGROUND_FILE, "rb") as f:
+    background_base64 = base64.b64encode(
+        f.read()
+    ).decode()
+
 
 # =========================================================
-# APPLY CSS + BACKGROUND
+# LOAD CSS
 # =========================================================
 
-background_css = f"""
-<style>
+if not CSS_FILE.exists():
+    st.error("❌ style.css not found.")
+    st.stop()
 
-.stApp {{
-    background-image: url("data:image/png;base64,{encoded_image}") !important;
-    background-size: cover !important;
-    background-position: center center !important;
-    background-repeat: no-repeat !important;
-    background-attachment: fixed !important;
-    min-height: 100vh !important;
-}}
+with open(CSS_FILE, "r", encoding="utf-8") as f:
+    css = f.read()
 
-[data-testid="stAppViewContainer"] {{
-    background: transparent !important;
-}}
 
-[data-testid="stHeader"] {{
-    background: transparent !important;
-}}
-
-</style>
-"""
-
-st.markdown(
-    background_css + "<style>" + css + "</style>",
-    unsafe_allow_html=True
+# Replace placeholder from CSS
+css = css.replace(
+    "__BACKGROUND_IMAGE__",
+    f"data:image/png;base64,{background_base64}"
 )
 
 
-# =========================================================
-# HEADER
-# =========================================================
-
 st.markdown(
-    """
-    <div class="main-title">
-        📚 PDF AI Assistant
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
-st.markdown(
-    """
-    <div class="subtitle">
-        Upload a PDF and ask questions directly from your document.
-    </div>
-    """,
+    f"<style>{css}</style>",
     unsafe_allow_html=True
 )
 
@@ -131,44 +85,33 @@ if not GEMINI_API_KEY:
     st.stop()
 
 
-gemini_client = genai.Client(
+client = genai.Client(
     api_key=GEMINI_API_KEY
 )
 
 
 # =========================================================
-# LOAD EMBEDDING MODEL
+# TITLE
 # =========================================================
 
-@st.cache_resource
-def load_embedding_model():
+st.markdown(
+    """
+    <div class="main-title">
+        📚 PDF AI Assistant
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
-    return SentenceTransformer(
-        "all-MiniLM-L6-v2"
-    )
 
-
-model = load_embedding_model()
-
-
-# =========================================================
-# SESSION STATE
-# =========================================================
-
-if "pdf_processed" not in st.session_state:
-    st.session_state.pdf_processed = False
-
-if "pdf_name" not in st.session_state:
-    st.session_state.pdf_name = ""
-
-if "chunks" not in st.session_state:
-    st.session_state.chunks = []
-
-if "embeddings" not in st.session_state:
-    st.session_state.embeddings = None
-
-if "file_id" not in st.session_state:
-    st.session_state.file_id = None
+st.markdown(
+    """
+    <div class="subtitle">
+        Upload a PDF and ask questions directly from your document.
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 
 # =========================================================
@@ -184,6 +127,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+
 st.markdown(
     """
     <div class="upload-description">
@@ -195,7 +139,7 @@ st.markdown(
 
 
 uploaded_file = st.file_uploader(
-    "Choose a PDF file",
+    "Upload PDF",
     type=["pdf"],
     label_visibility="collapsed"
 )
@@ -207,359 +151,190 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file is not None:
 
-    # -----------------------------------------------------
-    # Create unique ID for uploaded file
-    # -----------------------------------------------------
+    try:
 
-    file_bytes = uploaded_file.getvalue()
+        # -------------------------------------------------
+        # READ PDF
+        # -------------------------------------------------
 
-    current_file_id = (
-        uploaded_file.name,
-        len(file_bytes)
-    )
+        reader = PdfReader(uploaded_file)
 
+        pages_text = []
 
-    # -----------------------------------------------------
-    # Process only when a NEW file is uploaded
-    # -----------------------------------------------------
+        for page in reader.pages:
 
-    if current_file_id != st.session_state.file_id:
+            text = page.extract_text()
 
-        try:
-
-            with st.spinner("📖 Reading your PDF..."):
-
-                # =================================================
-                # READ PDF
-                # =================================================
-
-                reader = PdfReader(
-                    uploaded_file
-                )
-
-                pages = []
-
-                for page_number, page in enumerate(
-                    reader.pages,
-                    start=1
-                ):
-
-                    text = page.extract_text()
-
-                    if text:
-
-                        pages.append(
-                            {
-                                "page": page_number,
-                                "text": text
-                            }
-                        )
+            if text:
+                pages_text.append(text)
 
 
-                if not pages:
-
-                    st.error(
-                        "❌ No readable text was found in this PDF."
-                    )
-
-                    st.stop()
+        pdf_text = "\n\n".join(pages_text)
 
 
-                # =================================================
-                # CREATE CHUNKS
-                # =================================================
+        # -------------------------------------------------
+        # CHECK PDF
+        # -------------------------------------------------
 
-                chunks = []
-
-                chunk_size = 1000
-                overlap = 200
-
-                for page in pages:
-
-                    text = page["text"]
-
-                    start = 0
-
-                    while start < len(text):
-
-                        end = start + chunk_size
-
-                        chunk_text = text[start:end]
-
-                        if chunk_text.strip():
-
-                            chunks.append(
-                                {
-                                    "text": chunk_text,
-                                    "page": page["page"]
-                                }
-                            )
-
-                        start += (
-                            chunk_size - overlap
-                        )
-
-
-                if not chunks:
-
-                    st.error(
-                        "❌ Could not create text chunks from this PDF."
-                    )
-
-                    st.stop()
-
-
-                # =================================================
-                # CREATE EMBEDDINGS
-                # =================================================
-
-                texts = [
-                    chunk["text"]
-                    for chunk in chunks
-                ]
-
-                embeddings = model.encode(
-                    texts,
-                    normalize_embeddings=True
-                )
-
-
-                # =================================================
-                # SAVE IN SESSION STATE
-                # =================================================
-
-                st.session_state.chunks = chunks
-
-                st.session_state.embeddings = embeddings
-
-                st.session_state.pdf_name = (
-                    uploaded_file.name
-                )
-
-                st.session_state.file_id = (
-                    current_file_id
-                )
-
-                st.session_state.pdf_processed = True
-
-
-            # =================================================
-            # SUCCESS
-            # =================================================
-
-            st.success(
-                f"✅ {uploaded_file.name} processed successfully!"
-            )
-
-
-        except Exception as e:
+        if not pdf_text.strip():
 
             st.error(
-                "❌ Unable to process this PDF."
-            )
-
-            st.caption(
-                f"Error: {str(e)}"
+                "❌ Text could not be extracted from this PDF."
             )
 
             st.stop()
 
 
-    else:
+        # -------------------------------------------------
+        # LIMIT CONTEXT
+        # -------------------------------------------------
 
-        # Existing processed file
+        MAX_TEXT_LENGTH = 60000
+
+        pdf_context = pdf_text[:MAX_TEXT_LENGTH]
+
+
+        # -------------------------------------------------
+        # SUCCESS
+        # -------------------------------------------------
+
         st.success(
-            f"✅ {st.session_state.pdf_name} is ready!"
+            f"✅ {uploaded_file.name} uploaded successfully."
         )
 
 
-# =========================================================
-# QUESTION SECTION
-# =========================================================
+        # =================================================
+        # QUESTION
+        # =================================================
 
-if st.session_state.pdf_processed:
-
-    st.markdown(
-        """
-        <div class="question-section">
+        st.markdown(
+            """
             <div class="section-title">
                 🔎 Ask a Question
             </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+            """,
+            unsafe_allow_html=True
+        )
 
 
-    question = st.text_input(
-        "Enter your question:",
-        placeholder="e.g. What is the CTC?",
-        label_visibility="collapsed"
-    )
+        question = st.text_input(
+            "Your question",
+            placeholder="e.g. What is the CTC?",
+            label_visibility="collapsed"
+        )
 
 
-    # =====================================================
-    # SEARCH + ANSWER
-    # =====================================================
+        # =================================================
+        # ANSWER
+        # =================================================
 
-    if question:
-
-        try:
+        if question.strip():
 
             with st.spinner("🤖 Finding the answer..."):
-
-                # =============================================
-                # QUESTION EMBEDDING
-                # =============================================
-
-                question_embedding = model.encode(
-                    [question],
-                    normalize_embeddings=True
-                )[0]
-
-
-                # =============================================
-                # COSINE SIMILARITY
-                # =============================================
-
-                scores = (
-                    st.session_state.embeddings
-                    @ question_embedding
-                )
-
-
-                # =============================================
-                # TOP RESULTS
-                # =============================================
-
-                top_k = min(
-                    3,
-                    len(scores)
-                )
-
-                top_indices = scores.argsort()[
-                    -top_k:
-                ][::-1]
-
-
-                selected_chunks = [
-                    st.session_state.chunks[i]
-                    for i in top_indices
-                ]
-
-
-                # =============================================
-                # CREATE CONTEXT
-                # =============================================
-
-                context_parts = []
-
-                for chunk in selected_chunks:
-
-                    context_parts.append(
-                        chunk["text"]
-                    )
-
-
-                context = "\n\n".join(
-                    context_parts
-                )
-
-
-                # =============================================
-                # GEMINI PROMPT
-                # =============================================
 
                 prompt = f"""
 You are a PDF question-answering assistant.
 
-Answer the user's question using ONLY
-the information available in the uploaded PDF.
+Answer the user's question ONLY using the information
+contained in the uploaded PDF.
 
-IMPORTANT RULES:
+IMPORTANT:
 
-1. Do not use outside knowledge.
-2. Do not mention the PDF.
-3. Do not mention sources.
-4. Do not say "Based on the provided PDF context".
-5. Do not explain how you found the answer.
-6. Give ONLY the direct answer.
-7. Keep the answer short and precise.
-8. If the requested information is not available,
-   say exactly:
+- Give only the direct answer.
+- Do not say "Based on the PDF context".
+- Do not say "According to the PDF".
+- Do not explain your reasoning.
+- Do not mention the source.
+- Do not mention page numbers unless explicitly asked.
+- Keep the answer short and precise.
+- If the question asks for a person's name, return only the name.
+- If the question asks for salary or CTC, return only the salary/CTC.
+- If the question asks for an email, return only the email.
+- If the information is not present, say:
+  "I could not find this information in the uploaded PDF."
 
-I could not find this information.
+PDF CONTENT:
 
-Examples:
-
-Question: What is the name?
-Answer: Gungun Mishra
-
-Question: What is the CTC?
-Answer: 6 LPA
-
-Question: What is the email?
-Answer: example@gmail.com
-
-DOCUMENT CONTENT:
-{context}
+{pdf_context}
 
 USER QUESTION:
+
 {question}
 """
 
 
-                # =============================================
-                # GEMINI RESPONSE
-                # =============================================
-
-                response = gemini_client.models.generate_content(
-                    model="gemini-3.5-flash-lite",
+                response = client.models.generate_content(
+                    model="gemini-2.5-flash",
                     contents=prompt
                 )
 
 
-                answer_text = response.text.strip()
+                answer = response.text.strip()
 
 
-            # =================================================
+            # -------------------------------------------------
             # CLEAN ANSWER
-            # =================================================
+            # -------------------------------------------------
 
-            safe_answer = html.escape(
-                answer_text
-            ).replace(
+            prefixes = [
+                "Based on the provided PDF context,",
+                "Based on the PDF context,",
+                "According to the PDF,",
+                "According to the provided PDF,"
+            ]
+
+            for prefix in prefixes:
+
+                if answer.lower().startswith(
+                    prefix.lower()
+                ):
+
+                    answer = answer[len(prefix):].strip()
+
+
+            # -------------------------------------------------
+            # SAFE HTML
+            # -------------------------------------------------
+
+            answer = html.escape(answer)
+
+            answer = answer.replace(
                 "\n",
                 "<br>"
             )
 
 
-            # =================================================
-            # ANSWER DISPLAY
-            # =================================================
-
-            answer_html = (
-                '<div class="answer-section">'
-                '<div class="section-title">🤖 AI Answer</div>'
-                '<div class="answer-box">'
-                f'{safe_answer}'
-                '</div>'
-                '</div>'
-            )
-
+            # -------------------------------------------------
+            # DISPLAY
+            # -------------------------------------------------
 
             st.markdown(
-                answer_html,
+                """
+                <div class="answer-section">
+
+                    <div class="section-title">
+                        🤖 AI Answer
+                    </div>
+
+                    <div class="answer-box">
+                        """
+                + answer +
+                """
+                    </div>
+
+                </div>
+                """,
                 unsafe_allow_html=True
             )
 
 
-        except Exception as e:
+    except Exception as e:
 
-            st.error(
-                "❌ Something went wrong while generating the answer."
-            )
+        st.error(
+            "❌ Unable to process this PDF. Please try again."
+        )
 
-            st.caption(
-                f"Error: {str(e)}"
-            )
+        print(
+            "PDF Assistant Error:",
+            repr(e)
+        )
