@@ -2,6 +2,6 @@ streamlit
 google-genai
 pypdf
 sentence-transformers
-chromadb
+chromadb==1.5.9
 torch
 torchvision
