@@ -1,6 +1,3 @@
 streamlit
 google-genai
 pypdf
-sentence-transformers
-torch
-torchvision
