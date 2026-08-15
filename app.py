@@ -157,13 +157,18 @@ model = load_embedding_model()
 # CHROMADB
 # =========================================================
 
-client = chromadb.PersistentClient(
-    path=str(BASE_DIR / "chroma_db")
-)
+@st.cache_resource
+def get_chroma_collection():
 
-collection = client.get_or_create_collection(
-    name="pdf_documents"
-)
+    client = chromadb.Client()
+
+    collection = client.get_or_create_collection(
+        name="pdf_documents"
+    )
+
+    return collection
+
+collection = get_chroma_collection()
 
 
 # =========================================================
@@ -183,9 +188,11 @@ st.markdown(
 )
 
 uploaded_file = st.file_uploader(
-    "Choose a PDF file",
+    "Upload your PDF",
     type=["pdf"],
-    label_visibility="collapsed"
+    accept_multiple_files=False,
+    max_upload_size=200,
+    label_visibility="visible"
 )
 
 
