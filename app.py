@@ -308,24 +308,19 @@ USER QUESTION:
             # DISPLAY
             # -------------------------------------------------
 
-            st.markdown(
-                """
-                <div class="answer-section">
-
-                    <div class="section-title">
-                        🤖 AI Answer
-                    </div>
-
-                    <div class="answer-box">
-                        """
-                + answer +
-                """
-                    </div>
-
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+              st.markdown(
+                  f"""
+                  <div class="answer-section">
+                  <div class="section-title">
+                  🤖 AI Answer
+                  </div>
+                  <div class="answer-box">
+                  {answer}
+                  </div>
+                  </div>
+                  """,
+                  unsafe_allow_html=True
+              )
 
 
     except Exception as e:
