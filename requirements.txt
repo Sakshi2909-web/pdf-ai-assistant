@@ -3,3 +3,5 @@ google-genai
 pypdf
 sentence-transformers
 chromadb
+torch
+torchvision
