@@ -329,10 +329,8 @@ USER QUESTION:
 
 
     except Exception as e:
-
-        st.error(
-            "❌ Unable to process this PDF. Please try again."
-        )
+        st.error(f"❌ Error: {type(e).__name__}")
+        st.error(str(e))
 
         print(
             "PDF Assistant Error:",
