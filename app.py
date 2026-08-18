@@ -139,9 +139,10 @@ st.markdown(
 
 
 uploaded_file = st.file_uploader(
-    "Upload PDF",
+    "Choose a PDF file",
     type=["pdf"],
-    label_visibility="collapsed"
+    accept_multiple_files=False,
+    key="pdf_uploader"
 )
 
 
